@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
 from math import ceil
+import pdb
+from torchsummary import summary
 
 base_model = [
     # expand_ratio, channels, repeats, stride, kernel_size
@@ -14,7 +16,7 @@ base_model = [
 ]
 
 phi_values = {
-    # tuple of: (phi_value, resilution, drop_rate)
+    # tuple of: (phi_value, resolution, drop_rate)
     'b0': (0, 224, 0.2),  # alpha, beta, gamma, depth = alpha ** phi
     'b1': (0.5, 240, 0.2),
     'b2': (1, 260, 0.3),
@@ -55,7 +57,8 @@ class SqueezeExcitation(nn.Module):
         )
 
     def forward(self, x):
-        return x * self.se(x)  # 각 채널의 중요도를 추출?
+        return x * self.se(x)  # input channel x 채널의 중요도
+
 
 class InvertedResidualBlock(nn.Module):
     def __init__(
@@ -86,11 +89,16 @@ class InvertedResidualBlock(nn.Module):
                 hidden_dim, hidden_dim, kernel_size, stride, padding, groups=hidden_dim,  # Depthwise Conv
             ),
             SqueezeExcitation(hidden_dim, reduced_dim),
-            nn.Conv2d(hidden_dim, out_channels, 1, bias=False),
+            nn.Conv2d(hidden_dim, out_channels, 1, bias=False),  # point wise conv
             nn.BatchNorm2d(out_channels),
         )
 
     def stochastic_depth(self, x):
+        '''
+        vanishing gradient로 인해 학습이 느리게 되는 문제를 완화시키고자 stochastic depth 라는 randomness에 기반한 학습 방법
+        Stochastic depth란 network의 depth를 학습 단계에 random하게 줄이는 것을 의미
+        복잡하고 큰 데이터 셋에서는 별다를 효과를 보지는 못한다고 함
+        '''
         if not self.training:
             return x
 
@@ -129,8 +137,9 @@ class EfficientNet(nn.Module):
         features = [CNNBlock(3, channels, 3, stride=2, padding=1)]  # stage 1
         in_channels = channels
 
-        for expand_ratio, chanels, repeats, stride, kernel_size in base_model:
-            out_channels = 4 * ceil(int(channels*width_factor) / 4)
+        for expand_ratio, channels, repeats, stride, kernel_size in base_model:
+            out_channels = 4 * ceil(int(channels*width_factor) / 4)  # SqueezeExcitation reduction에서 4로 잘 나눠지도록 처리
+            # pdb.set_trace()
             layers_repeats = ceil(repeats * depth_factor)
 
             for layer in range(layers_repeats):  # stage 2~8
@@ -146,6 +155,7 @@ class EfficientNet(nn.Module):
                 )
                 in_channels = out_channels
 
+
         features.append(
             CNNBlock(in_channels, last_channels, kernel_size=1, stride=1, padding=0)  # stage9 Conv 1x1
         )
@@ -157,9 +167,8 @@ class EfficientNet(nn.Module):
         return self.classifier(x.view(x.shape[0], -1))  # flatten
 
 
+if __name__ == '__main__':
 
-
-def test():
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     version = 'b0'
     phi, res, drop_rate = phi_values[version]
@@ -171,8 +180,9 @@ def test():
     ).to(device)
 
     print(model(x).shape)
+    summary(model, input_size=(3, 224, 224))
 
-test()
+
 
 
 
