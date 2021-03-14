@@ -123,20 +123,3 @@ if __name__ == "__main__":
     # torchsummary.summary(model=model, input_size=(3, 224, 224), device='cpu')
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
