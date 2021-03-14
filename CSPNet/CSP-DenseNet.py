@@ -115,11 +115,9 @@ def csp_densenet_121(num_classes=1000):
 
 
 
-
 if __name__ == "__main__":
     model = csp_densenet_121()
     out = model(torch.rand((2, 3, 224, 224)))
     print(out.shape)
     # torchsummary.summary(model=model, input_size=(3, 224, 224), device='cpu')
-
 
