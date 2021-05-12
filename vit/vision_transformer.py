@@ -134,7 +134,7 @@ class Attention(nn.Module):
         attn = self.attn_drop(attn)
 
         weighted_avg = attn @ v  # (n_samples, n_heads, n_patches+1, head_dim)
-        # 원래 차원으로 되돌림
+        # 원래 차원으로 되돌림.
         weighted_avg = weighted_avg.transpose(1, 2)  # (n_samples, n_patches+1, n_heads, head_dim)
         weighted_avg = weighted_avg.flatten(2)  # concat (n_samples, n_patches+1, dim)
 
