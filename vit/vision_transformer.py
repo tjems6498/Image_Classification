@@ -126,7 +126,6 @@ class Attention(nn.Module):
         )  # (n_samples, n_patches+1, 3, n_heads, head_dim)
         qkv = qkv.permute(2, 0, 3, 1, 4)  # (3, n_samples, n_heads, n_patches+1, head_dim)
         q, k, v = qkv[0], qkv[1], qkv[2]  # 각각의 n_heads끼리 query, key, value로 나눔
-        pdb.set_trace()
         k_t = k.transpose(-2, -1)  # (n_samples, n_heads, head_dim, n_patches+1)  dot product를 위한 transpose
         # dot product를 통해 query와 key사이의 유사도를 구함
         dp = (q @ k_t) * self.scale  # (n_samples, n_heads, n_patches+1, n_patches+1)  @: dot product (2x1)@(1x2)=(2x2)
