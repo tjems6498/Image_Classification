@@ -4,7 +4,7 @@ import pdb
 
 class PatchEmbed(nn.Module):
     """
-    이미지를 패치로 나누고 임베딩으로 변환하는 함수
+    이미지를 패치로 나누고 1차원 벡터로 변환
 
     Parameters
     ----------
