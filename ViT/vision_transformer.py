@@ -390,7 +390,7 @@ if __name__ == '__main__':
     print(res_c.shape)
 
     # summary(model_custom, input_size=(3, 384, 384), device='cpu')
-    print(model_custom)
+    print(len(model_custom.state_dict().keys()))
 
 
 

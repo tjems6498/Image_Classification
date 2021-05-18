@@ -2,7 +2,7 @@ import numpy as np
 import timm
 import pdb
 import torch
-from vit.vision_transformer import VisionTransformer
+from ViT.vision_transformer import VisionTransformer
 
 def get_n_params(module):
     return sum(p.numel() for p in module.parameters() if p.requires_grad)
@@ -16,7 +16,7 @@ model_name = 'vit_base_patch16_384'
 model_official = timm.create_model(model_name, pretrained=True)
 model_official.eval()
 print(type(model_official))
-
+print(timm.list_models('ViT*'))
 custom_config = {
     "img_size": 384,
     "in_chans": 3,

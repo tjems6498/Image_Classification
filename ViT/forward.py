@@ -8,7 +8,7 @@ k = 10
 
 imagenet_labels = dict(enumerate(open("classes.txt")))
 
-model = torch.load("vit.pth")
+model = torch.load("ViT.pth")
 model.eval()
 
 
