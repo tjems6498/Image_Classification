@@ -1,10 +1,6 @@
 import torch
 import torch.nn as nn
-import torch.nn.init as init
 import torch.nn.functional as F
-
-import sys
-import numpy as np
 
 def conv(in_planes, out_planes, stride=1):
     return nn.Conv2d(in_planes, out_planes, kernel_size=3, stride=stride, padding=1, bias=True)
@@ -91,4 +87,4 @@ if __name__ == '__main__':
     model = Wide_ResNet(28, 10, 0.3, 10)
     outputs = model(torch.rand(4, 3, 32, 32))
     print(outputs.shape)
-    summary(model, input_size=(3, 32, 32), device='cpu')
+    summary(model, input_size=(3, 32, 32), device='cpu')  # 36,489,290 params
