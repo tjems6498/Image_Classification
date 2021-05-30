@@ -1,7 +1,7 @@
 import torch
 from torch import nn, einsum
 import numpy as np
-from einops import rearrange, repeat
+from einops import rearrange
 
 
 class CyclicShift(nn.Module):
@@ -10,8 +10,9 @@ class CyclicShift(nn.Module):
         self.displacement = displacement
 
     def forward(self, x):
-
-        return torch.roll(x, shifts=(self.displacement, self.displacement), dims=(1, 2))
+        pdb.set_trace()
+        # x.shape (b, 56, 56, 96)
+        return torch.roll(x, shifts=(self.displacement, self.displacement), dims=(1, 2))  # 각 차원별로 3씩 밀어버림
 
 
 class Residual(nn.Module):
@@ -73,24 +74,24 @@ class WindowAttention(nn.Module):
         super().__init__()
         inner_dim = head_dim * heads
 
-        self.heads = heads
-        self.scale = head_dim ** -0.5
-        self.window_size = window_size
+        self.heads = heads  #
+        self.scale = head_dim ** -0.5  # query와 key와의 dot product값을 scale하기 위한 값 -> 1 / root(head_dim)
+        self.window_size = window_size  # 7
         self.relative_pos_embedding = relative_pos_embedding
         self.shifted = shifted
 
         if self.shifted:
-            displacement = window_size // 2
+            displacement = window_size // 2  # 7//2 = 3
             self.cyclic_shift = CyclicShift(-displacement)
             self.cyclic_back_shift = CyclicShift(displacement)
             self.upper_lower_mask = nn.Parameter(create_mask(window_size=window_size, displacement=displacement,
                                                              upper_lower=True, left_right=False), requires_grad=False)
             self.left_right_mask = nn.Parameter(create_mask(window_size=window_size, displacement=displacement,
                                                             upper_lower=False, left_right=True), requires_grad=False)
-
         self.to_qkv = nn.Linear(dim, inner_dim * 3, bias=False)
 
         if self.relative_pos_embedding:
+            # self.relative_indices -> index (0~12 사이의 수를 가짐) / + window_size - 1 은 음수를 없애기 위해
             self.relative_indices = get_relative_distances(window_size) + window_size - 1
             self.pos_embedding = nn.Parameter(torch.randn(2 * window_size - 1, 2 * window_size - 1))  # (13, 13)
         else:
@@ -99,7 +100,6 @@ class WindowAttention(nn.Module):
         self.to_out = nn.Linear(inner_dim, dim)
 
     def forward(self, x):
-
         if self.shifted:
             x = self.cyclic_shift(x)
 
@@ -116,26 +116,24 @@ class WindowAttention(nn.Module):
         # (b, 3, 64, 49, 32), (b, 3, 64, 49, 32)  -> (b, 3, 64, 49, 49)
         # query와 key사이의 연관성(dot product) * scale(1 / root(head_dim))
         dots = einsum('b h w i d, b h w j d -> b h w i j', q, k) * self.scale
-        pdb.set_trace()
+
         if self.relative_pos_embedding:
             dots += self.pos_embedding[self.relative_indices[:, :, 0].type(torch.long),
                                        self.relative_indices[:, :, 1].type(torch.long)]  # (49, 49)
         else:
             dots += self.pos_embedding
-
-        if self.shifted:
-            dots[:, :, -nw_w:] += self.upper_lower_mask
-            dots[:, :, nw_w - 1::nw_w] += self.left_right_mask
+        if self.shifted:  # masking
+            dots[:, :, -nw_w:] += self.upper_lower_mask  # 아래쪽 가로모양 윈도우
+            dots[:, :, nw_w - 1::nw_w] += self.left_right_mask  # 오른쪽 세로모양 마스킹
 
         attn = dots.softmax(dim=-1)
-
         out = einsum('b h w i j, b h w j d -> b h w i d', attn, v)
         out = rearrange(out, 'b h (nw_h nw_w) (w_h w_w) d -> b (nw_h w_h) (nw_w w_w) (h d)',
                         h=h, w_h=self.window_size, w_w=self.window_size, nw_h=nw_h, nw_w=nw_w)
         out = self.to_out(out)
 
         if self.shifted:
-            out = self.cyclic_back_shift(out)
+            out = self.cyclic_back_shift(out)  # shift한 값을 원래 위치로
         return out
 
 
@@ -166,7 +164,7 @@ class PatchMerging(nn.Module):
 
     def forward(self, x):
         b, c, h, w = x.shape
-        new_h, new_w = h // self.downscaling_factor, w // self.downscaling_factor  #  patch_size 56, 56)
+        new_h, new_w = h // self.downscaling_factor, w // self.downscaling_factor  #  num patches (56 x 56)
         # self.patch_merge(x) : (b, 48, 3136)
         # self.patch_merge(x).view(b, -1, new_h, new_w) : (b, 48, 56, 56)
         # self.patch_merge(x).view(b, -1, new_h, new_w).permute(0, 2, 3, 1)  : (b, 56, 56, 48)
@@ -194,28 +192,29 @@ class StageModule(nn.Module):
             ]))
 
     def forward(self, x):
-
         x = self.patch_partition(x)
         for regular_block, shifted_block in self.layers:
             x = regular_block(x)
             x = shifted_block(x)
-        return x.permute(0, 3, 1, 2)
+        return x.permute(0, 3, 1, 2)  # (4, 56, 56, 96) -> (4, 96, 56, 56)
 
 
 class SwinTransformer(nn.Module):
     def __init__(self, *, hidden_dim, layers, heads, channels=3, num_classes=1000, head_dim=32, window_size=7,
                  downscaling_factors=(4, 2, 2, 2), relative_pos_embedding=True):
         super().__init__()
-
         self.stage1 = StageModule(in_channels=channels, hidden_dimension=hidden_dim, layers=layers[0],
                                   downscaling_factor=downscaling_factors[0], num_heads=heads[0], head_dim=head_dim,
                                   window_size=window_size, relative_pos_embedding=relative_pos_embedding)
+        # input shape
         self.stage2 = StageModule(in_channels=hidden_dim, hidden_dimension=hidden_dim * 2, layers=layers[1],
                                   downscaling_factor=downscaling_factors[1], num_heads=heads[1], head_dim=head_dim,
                                   window_size=window_size, relative_pos_embedding=relative_pos_embedding)
+
         self.stage3 = StageModule(in_channels=hidden_dim * 2, hidden_dimension=hidden_dim * 4, layers=layers[2],
                                   downscaling_factor=downscaling_factors[2], num_heads=heads[2], head_dim=head_dim,
                                   window_size=window_size, relative_pos_embedding=relative_pos_embedding)
+
         self.stage4 = StageModule(in_channels=hidden_dim * 4, hidden_dimension=hidden_dim * 8, layers=layers[3],
                                   downscaling_factor=downscaling_factors[3], num_heads=heads[3], head_dim=head_dim,
                                   window_size=window_size, relative_pos_embedding=relative_pos_embedding)
@@ -226,12 +225,15 @@ class SwinTransformer(nn.Module):
         )
 
     def forward(self, img):
-        x = self.stage1(img)
-        x = self.stage2(x)
-        x = self.stage3(x)
-        x = self.stage4(x)
-        x = x.mean(dim=[2, 3])
-        return self.mlp_head(x)
+        # image shape(b, 3, 224, 224)
+        x = self.stage1(img)  # (b, 96, 56, 56)
+        x = self.stage2(x)  # (b, 192, 28, 28)
+        x = self.stage3(x)  # (b, 384, 14, 14)
+        pdb.set_trace()
+        x = self.stage4(x)  # (b, 768, 7, 7)
+
+        x = x.mean(dim=[2, 3])  # (b, 768)
+        return self.mlp_head(x)  # (b, classes)
 
 
 def swin_t(hidden_dim=96, layers=(2, 2, 6, 2), heads=(3, 6, 12, 24), **kwargs):
