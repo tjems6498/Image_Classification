@@ -149,7 +149,6 @@ class SwinBlock(nn.Module):
         self.mlp_block = Residual(PreNorm(dim, FeedForward(dim=dim, hidden_dim=mlp_dim)))
 
     def forward(self, x):
-
         x = self.attention_block(x)
         x = self.mlp_block(x)
         return x
